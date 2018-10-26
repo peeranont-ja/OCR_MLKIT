@@ -15,6 +15,7 @@
 package com.google.firebase.codelab.mlkit
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -37,14 +38,15 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
-class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
+class MainActivity : AppCompatActivity() {
     private var mImageView: ImageView? = null
     private var mButton: Button? = null
     private var mCloudButton: Button? = null
     private var hideOverlayButton: Button? = null
     private var mSelectedImage: Bitmap? = null
     private var mGraphicOverlay: GraphicOverlay? = null
-    private var dropdown: Spinner? = null
+    private var dropdownFile: Spinner? = null
+    private var dropdownFolder: Spinner? = null
     private var result: TextView? = null
     // Max width (portrait mode)
     private var mImageMaxWidth: Int? = null
@@ -53,8 +55,12 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
 
     private val PERMISSIONS_REQUEST_CODE = 555
     private var hasImagesInDirectory = false
-    private var dropDownItem = ArrayList<String>()
+    private var dropDownFileItem = ArrayList<String>()
+    private var dropDownFolderItem = ArrayList<String>()
     private var fileList: ArrayList<File> = ArrayList()
+    private var folderList: ArrayList<File> = ArrayList()
+    private var desiredDirectory: File? = null
+    private var count = 1
 
 
     // Functions for loading images from app assets.
@@ -111,7 +117,8 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
         mCloudButton = findViewById(R.id.button_cloud_text)
         hideOverlayButton = findViewById(R.id.button_hide_overlay)
         mGraphicOverlay = findViewById(R.id.graphic_overlay)
-        dropdown = findViewById(R.id.spinner)
+        dropdownFile = findViewById(R.id.spinner_file)
+        dropdownFolder = findViewById(R.id.spinner_root)
         result = findViewById(R.id.tv_result)
 
         mButton!!.setOnClickListener {
@@ -120,9 +127,21 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
             runTextRecognition()
         }
         mCloudButton!!.setOnClickListener {
-            hideOverlayButton!!.visibility = View.INVISIBLE
-            hideOverlayButton!!.text = "Hide Overlay"
-            runCloudTextRecognition()
+            //            hideOverlayButton!!.visibility = View.INVISIBLE
+//            hideOverlayButton!!.text = "Hide Overlay"
+//            runCloudTextRecognition()
+            for (currentFolder in folderList) {
+                val globalPath: String = Environment.getExternalStorageDirectory().absolutePath
+                val sPath = "card"
+                count = 1
+                desiredDirectory = File("$globalPath/$sPath/$currentFolder")
+                Log.w("test", "" + desiredDirectory)
+                imageReaderNew(desiredDirectory!!)
+                for (currentFile in fileList) {
+                    mSelectedImage = BitmapFactory.decodeFile(currentFile.absolutePath)
+                    runCloudTextRecognition()
+                }
+            }
         }
         hideOverlayButton!!.setOnClickListener {
             if (mGraphicOverlay!!.visibility == View.VISIBLE) {
@@ -144,6 +163,9 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
         val detector = FirebaseVision.getInstance()
                 .onDeviceTextRecognizer
         mButton!!.isEnabled = false
+        result!!.text = ""
+        mGraphicOverlay!!.visibility = View.INVISIBLE
+
         detector.processImage(image)
                 .addOnSuccessListener { texts ->
                     mButton!!.isEnabled = true
@@ -166,32 +188,39 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
             result!!.text = "No Text Found !!!"
             return
         }
-        mGraphicOverlay!!.clear()
-        mGraphicOverlay!!.visibility = View.VISIBLE
+//        mGraphicOverlay!!.clear()
+//        mGraphicOverlay!!.visibility = View.VISIBLE
         for (i in blocks.indices) {
             val lines = blocks[i].lines
             for (j in lines.indices) {
                 val elements = lines[j].elements
                 for (k in elements.indices) {
-                    val textGraphic = TextGraphic(mGraphicOverlay, elements[k])
-                    mGraphicOverlay!!.add(textGraphic)
+//                    val textGraphic = TextGraphic(mGraphicOverlay, elements[k])
+//                    mGraphicOverlay!!.add(textGraphic)
                     concatText += elements[k].text
                 }
             }
         }
         result!!.text = concatText
+        Log.w("test result", concatText)
     }
 
     private fun runCloudTextRecognition() {
         mCloudButton!!.isEnabled = false
+        result!!.text = ""
+        mGraphicOverlay!!.visibility = View.INVISIBLE
+
+//        val image = FirebaseVisionImage.fromBitmap(mSelectedImage!!)
         val image = FirebaseVisionImage.fromBitmap(mSelectedImage!!)
         val detector = FirebaseVision.getInstance()
                 .cloudDocumentTextRecognizer
         detector.processImage(image)
                 .addOnSuccessListener { texts ->
                     mCloudButton!!.isEnabled = true
-                    hideOverlayButton!!.visibility = View.VISIBLE
+//                    hideOverlayButton!!.visibility = View.VISIBLE
                     processCloudTextRecognitionResult(texts)
+
+
                 }
                 .addOnFailureListener { e ->
                     // Task failed with an exception
@@ -224,61 +253,18 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
             }
         }
         result!!.text = concatText
+        Log.w("test result", "$count ---- $concatText")
+        count++
     }
 
     private fun showToast(message: String) {
         Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
     }
 
-    override fun onItemSelected(parent: AdapterView<*>, v: View, position: Int, id: Long) {
-        mGraphicOverlay!!.clear()
-        if (hasImagesInDirectory) {
-            mSelectedImage = BitmapFactory.decodeFile(fileList[position].absolutePath)
-            Log.w("test", mSelectedImage.toString())
-        } else {
-            when (position) {
-                0 -> mSelectedImage = getBitmapFromAsset(this, "Please_walk_on_the_grass.jpg")
-                1 ->
-                    // Whatever you want to happen when the second item gets selected
-                    mSelectedImage = getBitmapFromAsset(this, "non-latin.jpg")
-                2 ->
-                    // Whatever you want to happen when the third item gets selected
-                    mSelectedImage = getBitmapFromAsset(this, "nl2.jpg")
-            }
-        }
-        if (mSelectedImage != null) {
-            // Get the dimensions of the View
-            val targetedSize = targetedWidthHeight
-
-            val targetWidth = targetedSize.first
-            val maxHeight = targetedSize.second
-
-            // Determine how much to scale down the image
-            val scaleFactor = Math.max(
-                    mSelectedImage!!.width.toFloat() / targetWidth.toFloat(),
-                    mSelectedImage!!.height.toFloat() / maxHeight.toFloat())
-
-            val resizedBitmap = Bitmap.createScaledBitmap(
-                    mSelectedImage!!,
-                    (mSelectedImage!!.width / scaleFactor).toInt(),
-                    (mSelectedImage!!.height / scaleFactor).toInt(),
-                    true)
-
-            mImageView!!.setImageBitmap(resizedBitmap)
-            mSelectedImage = resizedBitmap
-        }
-    }
-
-    override fun onNothingSelected(parent: AdapterView<*>) {
-        // Do nothing
-    }
-
     companion object {
         private val TAG = "MainActivity"
-
         fun getBitmapFromAsset(context: Context, filePath: String): Bitmap? {
             val assetManager = context.assets
-
             val `is`: InputStream
             var bitmap: Bitmap? = null
             try {
@@ -317,23 +303,43 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
                     PERMISSIONS_REQUEST_CODE)
         } else {
             Log.e("PERMISSION CHECK", "PERMISSION GRANTED")
-            getImageData()
+            getAllCardDirectory()
         }
     }
 
-    private fun getImageData() {
-        val gPath: String = Environment.getExternalStorageDirectory().absolutePath
-        val sPath = "Pictures"
-        val cardPath = "card"
-//        val fullPath = File(gPath + File.separator + sPath)
-        val fullPath = File("$gPath/$sPath/$cardPath")
-        Log.w("test", "" + fullPath)
-        imageReaderNew(fullPath)
+    private fun getAllCardDirectory() {
+        mCloudButton!!.isEnabled = false
+        val globalPath: String = Environment.getExternalStorageDirectory().absolutePath
+        val sPath = "card"
+        val fullPath = File("$globalPath/$sPath")
+        val listAllDirectory = fullPath.listFiles()
+        if (listAllDirectory != null && listAllDirectory.isNotEmpty()) {
+            for (currentDirectory in listAllDirectory) {
+                dropDownFolderItem.add(currentDirectory.name)
+                folderList.add(currentDirectory.absoluteFile)
+            }
+        }
+
+        val adapter = ArrayAdapter(this, android.R.layout
+                .simple_spinner_dropdown_item, dropDownFolderItem)
+        dropdownFolder!!.adapter = adapter
+        dropdownFolder!!.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
+            override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
+                count = 1
+                desiredDirectory = File("$globalPath/$sPath/${dropDownFolderItem[p2]}")
+                Log.w("test", "" + desiredDirectory)
+                imageReaderNew(desiredDirectory!!)
+            }
+        }
     }
 
     private fun imageReaderNew(root: File) {
 //        val fileList: ArrayList<File> = ArrayList()
         val listAllFiles = root.listFiles()
+        dropDownFileItem.clear()
+        fileList.clear()
+        hasImagesInDirectory = false
 
         if (listAllFiles != null && listAllFiles.isNotEmpty()) {
             for (currentFile in listAllFiles) {
@@ -345,7 +351,7 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
                     // File Name
                     Log.w("downloadFileName", currentFile.name)
 
-                    dropDownItem.add(currentFile.name)
+                    dropDownFileItem.add(currentFile.name)
                     fileList.add(currentFile.absoluteFile)
 
                     hasImagesInDirectory = true
@@ -356,16 +362,58 @@ class MainActivity : AppCompatActivity(), AdapterView.OnItemSelectedListener {
             Log.w("fileList Failed", "" + fileList.size)
         }
 
-        setUpDropDownItem()
+//        setUpDropDownItem()
+        mCloudButton!!.isEnabled = true
     }
 
     private fun setUpDropDownItem() {
-        if (dropDownItem.isEmpty()) {
-            dropDownItem = arrayListOf("Image 1", "Image 2", "Image 3")
+        if (dropDownFileItem.isEmpty()) {
+            dropDownFileItem = arrayListOf("Image 1", "Image 2", "Image 3")
         }
-        val adapter = ArrayAdapter(this, android.R.layout
-                .simple_spinner_dropdown_item, dropDownItem)
-        dropdown!!.adapter = adapter
-        dropdown!!.onItemSelectedListener = this
+
+        val adapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                dropDownFileItem)
+
+        dropdownFile!!.adapter = adapter
+        dropdownFile!!.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
+            override fun onItemSelected(p0: AdapterView<*>?, p1: View?, position: Int, p3: Long) {
+                mGraphicOverlay!!.clear()
+                if (hasImagesInDirectory) {
+                    mSelectedImage = BitmapFactory.decodeFile(fileList[position].absolutePath)
+                    Log.w("test image", fileList[position].absolutePath)
+                    Log.w("test image", mSelectedImage.toString())
+                } else {
+                    when (position) {
+                        0 -> mSelectedImage = getBitmapFromAsset(applicationContext, "Please_walk_on_the_grass.jpg")
+                        1 -> mSelectedImage = getBitmapFromAsset(applicationContext, "non-latin.jpg")
+                        2 -> mSelectedImage = getBitmapFromAsset(applicationContext, "nl2.jpg")
+                    }
+                }
+                if (mSelectedImage != null) {
+                    // Get the dimensions of the View
+                    val targetedSize = targetedWidthHeight
+
+                    val targetWidth = targetedSize.first
+                    val maxHeight = targetedSize.second
+
+                    // Determine how much to scale down the image
+                    val scaleFactor = Math.max(
+                            mSelectedImage!!.width.toFloat() / targetWidth.toFloat(),
+                            mSelectedImage!!.height.toFloat() / maxHeight.toFloat())
+
+                    val resizedBitmap = Bitmap.createScaledBitmap(
+                            mSelectedImage!!,
+                            (mSelectedImage!!.width / scaleFactor).toInt(),
+                            (mSelectedImage!!.height / scaleFactor).toInt(),
+                            true)
+
+                    mImageView!!.setImageBitmap(resizedBitmap)
+                    mSelectedImage = resizedBitmap
+                }
+            }
+        }
     }
 }
